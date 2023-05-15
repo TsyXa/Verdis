@@ -5,6 +5,7 @@ from datetime import datetime
 import random
 import idgen
 import durationcalc
+from time import mktime
 
 client = commands.Bot(intents = discord.Intents.all(), command_prefix = "!", allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
@@ -71,7 +72,82 @@ async def warn(ctx, member: discord.Member, *, reason: str):
     except:
         await ctx.send(f">>> Successfully warned <@!{member.id}> for **{reason}** with case ID `WRN-{case}`. This warning **{durmessage}**.\n:warning: I could not DM the user to inform of them of this warning, either due to their DMs being closed or them having blocked this bot.")
 
-@client.command()
+@client.command(aliases=["warnings"])
+@commands.has_permissions(manage_messages=True)
+async def logs(ctx, member: discord.Member = None):
+    if member == None: #If member not inputted present ALL logs
+        logstring = ">>> "
+        try:
+            with open(f"{ctx.guild.id}logs.json", "r") as f:
+                logs = json.loads(f.read()) #Open logs file
+
+            for i in logs:
+                logstring += f"**User: <@!{i}>**\n" #Lists logs by user
+                for j in logs[i]:
+                    ts = lambda t : str(mktime(datetime.strptime(t, "%Y-%m-%d %H:%M:%S.%f").timetuple()))[:-2] #Function to turn datetime into unix
+                    try:
+                        expry = f"<t:{ts(logs[i][j]['expires'])}:R>" #Expiry date
+                    except:
+                        expry = "Never"
+
+                    _type = ""
+
+                    if j[:3] == "WRN":
+                        _type = "Warning"
+                    elif j[:3] == "TMO":
+                        _type = "Timeout"
+                    elif j[:3] == "KCK":
+                        _type = "Kick"
+                    elif j[:3] == "BAN":
+                        _type = "Ban"
+                    
+                    #Adds each warning to the string
+                    logstring += f"__{_type}__ - ID `{j}`\nModerator: <@!{logs[i][j]['mod']}>\nDate: <t:{ts(logs[i][j]['date'])}:f>\nExpires: {expry}\nReason: {logs[i][j]['reason']}\n\n"
+                logstring += "\n"
+
+            while len(logstring) >= 2000: #Ensures messages can be sent and if not splits them up
+                await ctx.send(logstring[:1999])
+                logstring = ">>>", logstring[1999:]
+            await ctx.send(logstring)
+                
+        except:
+            await ctx.send("There are no logs for this server!")
+            
+    else:
+        logstring = ">>> "
+        try:
+            with open(f"{ctx.guild.id}logs.json", "r") as f:
+                logs = json.loads(f.read()) #Open logs file
+            
+            for j in logs[str(member.id)]:
+                ts = lambda t : str(mktime(datetime.strptime(t, "%Y-%m-%d %H:%M:%S.%f").timetuple()))[:-2] #Function to turn datetime into unix
+                try:
+                    expry = f"<t:{ts(logs[str(member.id)][j]['expires'])}:R>" #Expiry date
+                except:
+                    expry = "Never"
+                
+                _type = ""
+                if j[:3] == "WRN":
+                    _type = "Warning"
+                elif j[:3] == "TMO":
+                    _type = "Timeout"
+                elif j[:3] == "KCK":
+                    _type = "Kick"
+                elif j[:3] == "BAN":
+                    _type = "Ban"
+
+                #Adds each warning to the string
+                logstring += f"__{_type}__ - ID `{j}`\nModerator: <@!{logs[str(member.id)][j]['mod']}>\nDate: <t:{ts(logs[str(member.id)][j]['date'])}:f>\nExpires: {expry}\nReason: {logs[str(member.id)][j]['reason']}\n\n"                
+            
+            while len(logstring) >= 2000: #Ensures messages can be sent and if not splits them up
+                await ctx.send(logstring[:1999])
+                logstring = ">>>", logstring[1999:]
+            await ctx.send(logstring)
+
+        except:
+            await ctx.send("There are no logs for this user!")
+    
+@client.command(aliases=["mute"])
 @commands.has_permissions(moderate_members=True)
 async def timeout(ctx, member: discord.Member, duration, *, reason: str):
     with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
