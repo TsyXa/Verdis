@@ -6,6 +6,8 @@ import random
 import idgen
 import durationcalc
 from time import mktime
+import asyncio
+import os
 
 client = commands.Bot(intents = discord.Intents.all(), command_prefix = "!", allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
@@ -105,6 +107,10 @@ async def logs(ctx, member: discord.Member = None):
                     logstring += f"__{_type}__ - ID `{j}`\nModerator: <@!{logs[i][j]['mod']}>\nDate: <t:{ts(logs[i][j]['date'])}:f>\nExpires: {expry}\nReason: {logs[i][j]['reason']}\n\n"
                 logstring += "\n"
 
+            if logstring == ">>> ":
+                await ctx.send("There are no logs for this server!")
+                return
+            
             while len(logstring) >= 2000: #Ensures messages can be sent and if not splits them up
                 await ctx.send(logstring[:1999])
                 logstring = ">>>", logstring[1999:]
@@ -301,7 +307,6 @@ async def idban(ctx, user: discord.User, *, reason: str):
         await ctx.guild.ban(user, reason=f"Banned by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `BAN-{case}`. This ban {durmessage}.")
         await ctx.send(f">>> Successfully banned <@!{user.id}> for **{reason}** with case ID `BAN-{case}`. This ban **{durmessage}**.\n:warning: I could not DM the user to inform of them of this ban, either due to their DMs being closed or them having blocked this bot.")
 
-
 @client.command()
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user: discord.User, case = f"BAN-{idgen.new(6)}"):
@@ -333,6 +338,55 @@ async def unban(ctx, user: discord.User, case = f"BAN-{idgen.new(6)}"):
     except:
         await ctx.guild.unban(user, reason=f"=Unbanned by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) (case ID `{case}`).")
         await ctx.send(f">>> Successfully unbanned <@!{user.id}> (case ID `{case}`).\n:warning: I could not DM the user to inform of them of this unban, either due to their DMs being closed or them having blocked this bot.")
+
+@client.command(aliases=["clearlog", "clearlogs", "clearwarns", "clearwarning", "clearwarnings"])
+@commands.has_permissions(kick_members=True)
+async def clearwarn(ctx, member: discord.Member = None, case = None):
+    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
+                pass
+
+    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
+        logs = logsf.read()
+
+        try: #Json -> Dict
+            logs = json.loads(logs)
+        except:
+            await ctx.send(":x: There aren't any logs for this server!")
+            return
+
+    if member != None: #If member specified
+        if case == None: #If no specific case
+            del logs[str(member.id)] #Clear all
+            await ctx.send(f"Successfully removed all logs for user <@!{member.id}>")
+
+        else: #If case specified
+            try:
+                del logs[str(member.id)][case] #Clear specific case
+                await ctx.send(f"Successfully removed case `{case}` from user <@!{member.id}>.")
+            except:
+                await ctx.send(f":x: Sorry, I could not find case `{case}` for user <@!{member.id}>.\n:bulb: Case IDs are case-sensitive. Make sure you used capital letters where necessary.")
+
+    else: #If clear ALL logs
+        checkmsg = await ctx.send(":information_source: Are you sure you want to remove **all** logs for this server? This action is **irreversible**.\nReact with :white_check_mark: to continue (auto cancel in 5s).")
+        await checkmsg.add_reaction("✅")
+
+        def claimCheck(reaction, user): #Check to confirm delete all logs
+            return reaction.message.id == checkmsg.id and reaction.emoji == "✅" and not user.bot
+        
+        try:
+            reaction, user = await client.wait_for("reaction_add", check=claimCheck, timeout=5)
+        except asyncio.TimeoutError: #If no reaction within 5s
+            await checkmsg.edit(content=":x: Clear all server logs cancelled")
+        else:
+            try:
+                logs = {}
+                await checkmsg.edit(content="All server logs deleted.")
+            except: #If there is no logs file
+                await checkmsg.edit(content=":x: There aren't any logs for this server!")
+
+    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
+        logs = json.dumps(logs, indent=4)
+        logsf.write(logs)
 
 token = open("token.txt", "r").read()
 client.run(token, log_handler=None)
