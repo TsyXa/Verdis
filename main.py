@@ -2,12 +2,12 @@ import discord
 import json
 from discord.ext import commands
 from datetime import datetime
-import random
 import idgen
 import durationcalc
-from time import mktime
+from time import mktime, time as unix
 import asyncio
-import os
+import sqlite3 as sql
+from math import floor
 
 client = commands.Bot(intents = discord.Intents.all(), command_prefix = "!", allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
@@ -37,37 +37,36 @@ async def on_command_error(ctx, error):
 @client.command()
 @commands.has_permissions(manage_messages=True)
 async def warn(ctx, member: discord.Member, *, reason: str):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
         pass
-
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
-
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            logs = {}
 
     durmessage, duration = durationcalc.dur(reason)
 
-    if duration == None:
-        date = None
+    if duration == 0:
+        date = 0
     else:
-        date = str(durationcalc.expdate(start = datetime.now(), days = duration))
+        date = floor(unix() + duration) #Calculate expiry date
 
-    reason = reason.split("-duration ")[0]
-    case = idgen.new(6)
+    reason = reason.split("-duration ")[0] #Remove duration from reason message
+    case = idgen.new(6) #Create case number
 
-    try: #Logs the warning in server logs
-        logs[str(member.id)][f"WRN-{case}"] = {"reason": reason, "mod": ctx.author.id, "date": str(datetime.now()), "expires": date}
-    except:
-        logs[str(member.id)] = {}
-        logs[str(member.id)][f"WRN-{case}"] = {"reason": reason, "mod": ctx.author.id, "date":str(datetime.now()), "expires": date}
-        
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
-    
+    #Update and close logs database
+    cursor.execute(f"INSERT INTO logs VALUES ('WRN-{case}', {member.id}, {ctx.author.id}, '{reason}', {floor(unix())}, {date})")
+    logs.commit()
+    logs.close()
+
     try:
         await member.send(f">>> You have been warned in the server **{ctx.guild.name}** for **{reason}** with case ID `WRN-{case}`.\n:warning: This warning **{durmessage}**.")
         await ctx.send(f">>> Successfully warned <@!{member.id}> for **{reason}** with case ID `WRN-{case}`. This warning **{durmessage}**.")
@@ -156,70 +155,66 @@ async def logs(ctx, member: discord.Member = None):
 @client.command(aliases=["mute"])
 @commands.has_permissions(moderate_members=True)
 async def timeout(ctx, member: discord.Member, duration, *, reason: str):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
         pass
 
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
+    durmessage, duration, todur = durationcalc.to_dur(duration)
 
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            logs = {}
+    date = floor(unix() + duration) #Calculate expiry date
 
-    if int(duration[:-1]) > 28:
-        await ctx.send(f"> :x: You cannot time out a user for more than 28 days.")
-        return
-    
-    durmessage, duration = durationcalc.to_dur(duration)
+    reason = reason.split("-duration ")[0] #Remove duration from reason message
+    case = idgen.new(6) #Create case number
 
-    date = str(duration + datetime.now())
-    case = idgen.new(6)
-
-    try: #Logs the time out in server logs
-        logs[str(member.id)][f"TMO-{case}"] = {"reason": reason, "mod": ctx.author.id, "date": str(datetime.now()), "expires": date}
-    except:
-        logs[str(member.id)] = {}
-        logs[str(member.id)][f"TMO-{case}"] = {"reason": reason, "mod": ctx.author.id, "date":str(datetime.now()), "expires": date}
-        
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
+    #Update and close logs database
+    cursor.execute(f"INSERT INTO logs VALUES ('TMO-{case}', {member.id}, {ctx.author.id}, '{reason}', {floor(unix())}, {date})")
+    logs.commit()
+    logs.close()
     
     try:
         await member.send(f">>> You have been timed out in the server **{ctx.guild.name}** for **{reason}** with case ID `TMO-{case}`.\n:warning: This time out **{durmessage}**.")
-        await member.timeout(duration, reason = f"Timed out by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `TMO-{case}`. This time out {durmessage}.")
+        await member.timeout(todur, reason = f"Timed out by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `TMO-{case}`. This time out {durmessage}.")
         await ctx.send(f">>> Successfully timed out <@!{member.id}> for **{reason}** with case ID `TMO-{case}`. This time out **{durmessage}**.")
     except:
-        await member.timeout(duration, reason = f"Timed out by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `TMO-{case}`. This time out {durmessage}.")
+        await member.timeout(todur, reason = f"Timed out by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `TMO-{case}`. This time out {durmessage}.")
         await ctx.send(f">>> Successfully timed out <@!{member.id}> for **{reason}** with case ID `TMO-{case}`. This time out **{durmessage}**.\n:warning: I could not DM the user to inform of them of this time out, either due to their DMs being closed or them having blocked this bot.")
 
 @client.command()
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member, *, reason: str):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
         pass
 
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
+    case = idgen.new(6) #Create case number
 
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            logs = {}
-            
-    case = idgen.new(6)
+    #Update and close logs database
+    cursor.execute(f"INSERT INTO logs VALUES ('KCK-{case}', {member.id}, {ctx.author.id}, '{reason}', {floor(unix())}, 0)")
+    logs.commit()
+    logs.close()
 
-    try: #Logs the kick in server logs
-        logs[str(member.id)][f"KCK-{case}"] = {"reason": reason, "mod": ctx.author.id, "date": str(datetime.now()), "expires": None}
-    except:
-        logs[str(member.id)] = {}
-        logs[str(member.id)][f"KCK-{case}"] = {"reason": reason, "mod": ctx.author.id, "date":str(datetime.now()), "expires": None}
-        
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
-    
     try:
         await member.send(f">>> You have been kicked from the server **{ctx.guild.name}** for **{reason}** with case ID `KCK-{case}`.\n:information_source: You may rejoin the server at any time.")
         await member.kick(reason=f"Kicked by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `KCK-{case}`")
@@ -230,74 +225,36 @@ async def kick(ctx, member: discord.Member, *, reason: str):
 
 @client.command()
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member, *, reason: str):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
+async def ban(ctx, user: discord.User, *, reason: str):
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
         pass
-
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
-
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            logs = {}
 
     durmessage, duration = durationcalc.dur(reason)
 
-    if duration == None:
-        date = None
+    if duration == 0:
+        date = 0
     else:
-        date = str(durationcalc.expdate(start = datetime.now(), days = duration))
+        date = floor(unix() + duration) #Calculate expiry date
 
-    reason = reason.split("-duration ")[0]
-    case = idgen.new(6)
+    reason = reason.split("-duration ")[0] #Remove duration from reason message
+    case = idgen.new(6) #Create case number
 
-    try: #Logs the ban in server logs
-        logs[str(member.id)][f"BAN-{case}"] = {"reason": reason, "mod": ctx.author.id, "date": str(datetime.now()), "expires": date}
-    except:
-        logs[str(member.id)] = {}
-        logs[str(member.id)][f"BAN-{case}"] = {"reason": reason, "mod": ctx.author.id, "date":str(datetime.now()), "expires": date}
-        
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
-
-    try:
-        await member.send(f">>> You have been banned from the server **{ctx.guild.name}** for **{reason}** with case ID `BAN-{case}`.\n:warning: This ban **{durmessage}**.")
-        await member.ban(reason=f"Banned by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `BAN-{case}`. This ban {durmessage}.")
-        await ctx.send(f">>> Successfully banned <@!{member.id}> for **{reason}** with case ID `BAN-{case}`. This ban **{durmessage}**.")
-    except:
-        await member.ban(reason=f"Banned by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id}) for reason {reason} with case ID `BAN-{case}`. This ban {durmessage}.")
-        await ctx.send(f">>> Successfully banned <@!{member.id}> for **{reason}** with case ID `BAN-{case}`. This ban **{durmessage}**.\n:warning: I could not DM the user to inform of them of this ban, either due to their DMs being closed or them having blocked this bot.")
-
-@client.command()
-@commands.has_permissions(ban_members=True)
-async def idban(ctx, user: discord.User, *, reason: str):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
-        pass
-
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
-
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            logs = {}
-
-    duration = None #Sets variables manually rather than using the duration calculator
-    date = None
-    durmessage = "is permanent"
-    case = case = idgen.new(6)
-
-    try: #Logs the ban in server logs
-        logs[str(user.id)][f"BAN-{case}"] = {"reason": reason, "mod": ctx.author.id, "date": str(datetime.now()), "expires": date}
-    except:
-        logs[str(user.id)] = {}
-        logs[str(user.id)][f"BAN-{case}"] = {"reason": reason, "mod": ctx.author.id, "date":str(datetime.now()), "expires": date}
-        
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
+    #Update and close logs database
+    cursor.execute(f"INSERT INTO logs VALUES ('BAN-{case}', {user.id}, {ctx.author.id}, '{reason}', {floor(unix())}, {date})")
+    logs.commit()
+    logs.close()
 
     try:
         await user.send(f">>> You have been banned from the server **{ctx.guild.name}** for **{reason}** with case ID `BAN-{case}`.\n:warning: This ban **{durmessage}**.")
@@ -309,28 +266,35 @@ async def idban(ctx, user: discord.User, *, reason: str):
 
 @client.command()
 @commands.has_permissions(ban_members=True)
-async def unban(ctx, user: discord.User, case = f"BAN-{idgen.new(6)}"):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
+async def unban(ctx, user: discord.User, case = None):
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
         pass
 
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
+    date = floor(unix())
 
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            logs = {}
-            
-    try: #Logs the unban in server logs
-        logs[str(user.id)][f"{case}"]["expires"] = str(datetime.now())
-    except:
-        logs[str(user.id)] = {}
-        logs[str(user.id)][f"{case}"] = {"reason": None, "mod": None, "date": None, "expires": str(datetime.now())}
-        
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
-        
+    #Update and close logs database
+    cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}'") #Test if log ID is valid
+    if case == None or cursor.fetchone() == None:
+        case = f"BAN-{idgen.new(6)}"
+        cursor.execute(f"INSERT INTO logs VALUES ('{case}', {user.id}, 0, 'UNKNOWN', 0, {floor(unix())})")
+    else:
+        cursor.execute(f"UPDATE logs SET expires = {date} WHERE log_id = '{case}' AND user_id = {user.id}")
+
+    logs.commit()
+    logs.close()
+
     try:
         await user.send(f">>> You have been unbanned from the server **{ctx.guild.name}** (case ID `{case}`). You may rejoin at any time.")
         await ctx.guild.unban(user, reason = f"Unbanned by {ctx.author.name}#{ctx.author.discriminator} (ID {ctx.author.id})  (case ID {case})")
@@ -342,26 +306,29 @@ async def unban(ctx, user: discord.User, case = f"BAN-{idgen.new(6)}"):
 @client.command(aliases=["clearlog", "clearlogs", "clearwarns", "clearwarning", "clearwarnings"])
 @commands.has_permissions(kick_members=True)
 async def clearwarn(ctx, member: discord.Member = None, case = None):
-    with open(f"{ctx.guild.id}logs.json", "a"): #Check if file exists, if not create it
-                pass
-
-    with open(f"{ctx.guild.id}logs.json") as logsf: #Open file
-        logs = logsf.read()
-
-        try: #Json -> Dict
-            logs = json.loads(logs)
-        except:
-            await ctx.send(":x: There aren't any logs for this server!")
-            return
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
+        pass
 
     if member != None: #If member specified
         if case == None: #If no specific case
-            del logs[str(member.id)] #Clear all
+            cursor.execute(f"DELETE FROM logs WHERE user_id = {member.id}")
             await ctx.send(f"Successfully removed all logs for user <@!{member.id}>")
 
         else: #If case specified
             try:
-                del logs[str(member.id)][case] #Clear specific case
+                cursor.execute(f"DELETE FROM logs WHERE user_id = {member.id} AND log_id = '{case}'")
                 await ctx.send(f"Successfully removed case `{case}` from user <@!{member.id}>.")
             except:
                 await ctx.send(f":x: Sorry, I could not find case `{case}` for user <@!{member.id}>.\n:bulb: Case IDs are case-sensitive. Make sure you used capital letters where necessary.")
@@ -379,14 +346,14 @@ async def clearwarn(ctx, member: discord.Member = None, case = None):
             await checkmsg.edit(content=":x: Clear all server logs cancelled")
         else:
             try:
-                logs = {}
+                cursor.execute(f"DROP TABLE logs")
                 await checkmsg.edit(content="All server logs deleted.")
             except: #If there is no logs file
                 await checkmsg.edit(content=":x: There aren't any logs for this server!")
 
-    with open(f"{ctx.guild.id}logs.json", "w") as logsf: #Dump back into json
-        logs = json.dumps(logs, indent=4)
-        logsf.write(logs)
+    #Update and close logs database
+    logs.commit()
+    logs.close()
 
 token = open("token.txt", "r").read()
 client.run(token, log_handler=None)
