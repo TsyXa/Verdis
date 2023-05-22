@@ -76,81 +76,73 @@ async def warn(ctx, member: discord.Member, *, reason: str):
 @client.command(aliases=["warnings"])
 @commands.has_permissions(manage_messages=True)
 async def logs(ctx, member: discord.Member = None):
+    #Set up logs database
+    logs = sql.connect(f"{ctx.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+        await ctx.send("There are no logs for this server!")
+        return
+    except sql.OperationalError: #If db already exists
+        pass
+
+    logstring = ">>> "
+
     if member == None: #If member not inputted present ALL logs
-        logstring = ">>> "
-        try:
-            with open(f"{ctx.guild.id}logs.json", "r") as f:
-                logs = json.loads(f.read()) #Open logs file
-
-            for i in logs:
-                logstring += f"**User: <@!{i}>**\n" #Lists logs by user
-                for j in logs[i]:
-                    ts = lambda t : str(mktime(datetime.strptime(t, "%Y-%m-%d %H:%M:%S.%f").timetuple()))[:-2] #Function to turn datetime into unix
-                    try:
-                        expry = f"<t:{ts(logs[i][j]['expires'])}:R>" #Expiry date
-                    except:
-                        expry = "Never"
-
-                    _type = ""
-
-                    if j[:3] == "WRN":
-                        _type = "Warning"
-                    elif j[:3] == "TMO":
-                        _type = "Timeout"
-                    elif j[:3] == "KCK":
-                        _type = "Kick"
-                    elif j[:3] == "BAN":
-                        _type = "Ban"
-                    
-                    #Adds each warning to the string
-                    logstring += f"__{_type}__ - ID `{j}`\nModerator: <@!{logs[i][j]['mod']}>\nDate: <t:{ts(logs[i][j]['date'])}:f>\nExpires: {expry}\nReason: {logs[i][j]['reason']}\n\n"
-                logstring += "\n"
-
-            if logstring == ">>> ":
-                await ctx.send("There are no logs for this server!")
-                return
-            
-            while len(logstring) >= 2000: #Ensures messages can be sent and if not splits them up
-                await ctx.send(logstring[:1999])
-                logstring = ">>>", logstring[1999:]
-            await ctx.send(logstring)
-                
-        except:
-            await ctx.send("There are no logs for this server!")
-            
+        cursor.execute(f"SELECT * FROM logs")
     else:
-        logstring = ">>> "
-        try:
-            with open(f"{ctx.guild.id}logs.json", "r") as f:
-                logs = json.loads(f.read()) #Open logs file
-            
-            for j in logs[str(member.id)]:
-                ts = lambda t : str(mktime(datetime.strptime(t, "%Y-%m-%d %H:%M:%S.%f").timetuple()))[:-2] #Function to turn datetime into unix
-                try:
-                    expry = f"<t:{ts(logs[str(member.id)][j]['expires'])}:R>" #Expiry date
-                except:
-                    expry = "Never"
-                
-                _type = ""
-                if j[:3] == "WRN":
-                    _type = "Warning"
-                elif j[:3] == "TMO":
-                    _type = "Timeout"
-                elif j[:3] == "KCK":
-                    _type = "Kick"
-                elif j[:3] == "BAN":
-                    _type = "Ban"
+        cursor.execute(f"SELECT * FROM logs WHERE user_id = {member.id}")
 
-                #Adds each warning to the string
-                logstring += f"__{_type}__ - ID `{j}`\nModerator: <@!{logs[str(member.id)][j]['mod']}>\nDate: <t:{ts(logs[str(member.id)][j]['date'])}:f>\nExpires: {expry}\nReason: {logs[str(member.id)][j]['reason']}\n\n"                
-            
-            while len(logstring) >= 2000: #Ensures messages can be sent and if not splits them up
-                await ctx.send(logstring[:1999])
-                logstring = ">>>", logstring[1999:]
-            await ctx.send(logstring)
+    loglist = cursor.fetchall()
 
-        except:
+    if len(loglist) == 0: #If list is empty
+        await ctx.send("There are no logs for this server!")
+        return
+    
+    print (loglist)
+    for i in loglist:
+        _type = ""
+        if i[0][:3] == "WRN":
+            _type = "Warning"
+        elif i[0][:3] == "TMO":
+            _type = "Timeout"
+        elif i[0][:3] == "KCK":
+            _type = "Kick"
+        elif i[0][:3] == "BAN":
+            _type = "Ban"
+        
+        #Format both initial and expiry dates
+        date, expiry = i[4], i[5]
+        if date == 0: 
+            date = "Unknown"
+        if expiry == 0:
+            expiry = "Never"
+        else:
+            expiry = f"<t:{expiry}:f>"
+
+        #Adds the warning to the string and repeats
+        logstring += f"**Case ID** - `{i[0]}` ({_type})\nUser: <@!{i[1]}>\nModerator: <@!{i[2]}>\nReason: {i[3]}\nDate: <t:{date}:f>\nExpires: {expiry}\n\n"
+
+    if logstring == ">>> ":
+        if member.id == None:
+            await ctx.send("There are no logs for this server!")
+        else:
             await ctx.send("There are no logs for this user!")
+        return
+    
+    while len(logstring) >= 2000: #Ensures messages can be sent and if not splits them up
+        await ctx.send(logstring[:1999])
+        logstring = ">>>", logstring[1999:]
+    await ctx.send(logstring)
+            
+    logs.close()
     
 @client.command(aliases=["mute"])
 @commands.has_permissions(moderate_members=True)
