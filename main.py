@@ -105,8 +105,7 @@ async def logs(ctx, member: discord.Member = None):
     if len(loglist) == 0: #If list is empty
         await ctx.send("There are no logs for this server!")
         return
-    
-    print (loglist)
+
     for i in loglist:
         _type = ""
         if i[0][:3] == "WRN":
@@ -119,16 +118,24 @@ async def logs(ctx, member: discord.Member = None):
             _type = "Ban"
         
         #Format both initial and expiry dates
-        date, expiry = i[4], i[5]
+        mod, date, expiry = i[2], i[4], i[5]
         if date == 0: 
             date = "Unknown"
+        else:
+            date = f"<t:{date}:f>"
+
+        if mod == 0:
+            mod = "Unknown"
+        else:
+            mod = f"<@!{mod}>"
+
         if expiry == 0:
             expiry = "Never"
         else:
             expiry = f"<t:{expiry}:f>"
 
         #Adds the warning to the string and repeats
-        logstring += f"**Case ID** - `{i[0]}` ({_type})\nUser: <@!{i[1]}>\nModerator: <@!{i[2]}>\nReason: {i[3]}\nDate: <t:{date}:f>\nExpires: {expiry}\n\n"
+        logstring += f"**Case ID** - `{i[0]}` ({_type})\nUser: <@!{i[1]}>\nModerator: {mod}\nReason: {i[3]}\nDate: {date}\nExpires: {expiry}\n\n"
 
     if logstring == ">>> ":
         if member.id == None:
@@ -280,7 +287,7 @@ async def unban(ctx, user: discord.User, case = None):
     cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}'") #Test if log ID is valid
     if case == None or cursor.fetchone() == None:
         case = f"BAN-{idgen.new(6)}"
-        cursor.execute(f"INSERT INTO logs VALUES ('{case}', {user.id}, 0, 'UNKNOWN', 0, {floor(unix())})")
+        cursor.execute(f"INSERT INTO logs VALUES ('{case}', {user.id}, 0, 'Unknown', 0, {floor(unix())})")
     else:
         cursor.execute(f"UPDATE logs SET expires = {date} WHERE log_id = '{case}' AND user_id = {user.id}")
 
