@@ -7,6 +7,7 @@ from time import time as unix
 import asyncio
 import sqlite3 as sql
 from math import floor
+from json import loads
 
 client = commands.Bot(intents = discord.Intents.all(), command_prefix = "!", allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
@@ -37,6 +38,28 @@ async def on_command_error(ctx, error):
         await ctx.send(f">>> :x: I could not find the channel `{error.argument}`.\n:bulb: Try tagging the channel, or using its Channel ID.")
     else:
         await ctx.send(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
+
+@client.tree.command(name="help", description="Provides a list of commands or info about a specific command")
+@app_commands.describe(cmd="Info about a specific command")
+async def help(interaction: discord.Interaction, cmd: str = None):
+    with open("commandlist.json") as clist: #Open commands list
+            clist = clist.read()
+            clist = loads(clist)
+
+    if cmd == None: #If no command specified
+        cstring = ">>> :tools: **Command List**"
+        for i in clist:
+            cstring += f"\n`/{i}` - {clist[i][0]}" #Add each command to the string
+        cstring += "\n\n:bulb: For more information on a specific command, use `/help (command)`"
+        await interaction.response.send_message(cstring, ephemeral = True) #Show all commands
+
+    else:
+        cmd = cmd.replace("/", "").lower()
+
+        try:
+            await interaction.response.send_message(f">>> :tools: `/{cmd}` **Command Help**\n\n`{clist[cmd][1]}` - {clist[cmd][0]}", ephemeral = True)
+        except:
+            await interaction.response.send_message(f">>> :x: Sorry, I could not find the command `{cmd}`.\n:bulb: Have you spelt the command correctly? Use `/help` to check the command list and try again.", ephemeral = True)
 
 @client.tree.command(name="warn", description="Warn a user")
 @app_commands.describe(member="The member to warn", reason = "The reason for the warning", duration = "How long the warning should last")
@@ -187,6 +210,41 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, reas
         await member.timeout(todur, reason = f"Timed out by {interaction.user.name}#{interaction.user.discriminator} (ID {interaction.user.id}) for reason {reason} with case ID `TMO-{case}`. This time out {durmessage}.")
         await interaction.response.send_message(f">>> Successfully timed out <@!{member.id}> for **{reason}** with case ID `TMO-{case}`. This time out **{durmessage}**.\n:warning: I could not DM the user to inform of them of this time out, either due to their DMs being closed or them having blocked this bot.")
 
+@client.tree.command(name="untimeout", description="Untime out a user")
+@app_commands.describe(member="The member to target", case="The Verdis Case ID of the original ban")
+@commands.has_permissions(moderate_members=True)
+async def untimeout(interaction: discord.Interaction, member: discord.Member, case: str = None):
+    #Set up logs database
+    logs = sql.connect(f"{interaction.guild.id}.db")
+    cursor = logs.cursor()
+    try:
+        cursor.execute("""CREATE TABLE logs (
+                        log_id text,
+                        user_id integer,
+                        mod_id integer,
+                        reason text,
+                        date integer,
+                        expires integer
+                        )""")
+    except sql.OperationalError: #If db already exists
+        pass
+
+    date = floor(unix())
+
+    #Update and close logs database
+    cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = {member.id}") #Test if log ID is valid
+    if case == None or cursor.fetchone() == []:
+        case = f"TMO-{idgen.new(6)}"
+        cursor.execute(f"INSERT INTO logs VALUES ('{case}', {member.id}, 0, 'Unknown', 0, {floor(unix())})")
+    else:
+        cursor.execute(f"UPDATE logs SET expires = {date} WHERE log_id = '{case}' AND user_id = {member.id}")
+
+    logs.commit()
+    logs.close()
+    
+    await member.timeout(None, reason=f"Time out removed by {interaction.user.name}#{interaction.user.discriminator} (ID {interaction.user.id}) (case ID `{case}`).")
+    await interaction.response.send_message(f">>> Successfully removed timeout for <@!{member.id}> (case ID `{case}`).")
+    
 @client.tree.command(name="kick", description="Kick a user")
 @app_commands.describe(member="The member to kick", reason="The reason for the kick")
 @commands.has_permissions(kick_members=True)
@@ -284,8 +342,8 @@ async def unban(interaction: discord.Interaction, user: discord.User, case: str 
     date = floor(unix())
 
     #Update and close logs database
-    cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}'") #Test if log ID is valid
-    if case == None or cursor.fetchone() == None:
+    cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = '{user.id}'") #Test if log ID is valid
+    if case == None or cursor.fetchone() == []:
         case = f"BAN-{idgen.new(6)}"
         cursor.execute(f"INSERT INTO logs VALUES ('{case}', {user.id}, 0, 'Unknown', 0, {floor(unix())})")
     else:
@@ -303,9 +361,9 @@ async def unban(interaction: discord.Interaction, user: discord.User, case: str 
         await interaction.response.send_message(f">>> Successfully unbanned <@!{user.id}> (case ID `{case}`).\n:warning: I could not DM the user to inform of them of this unban, either due to their DMs being closed or them having blocked this bot.")
 
 @client.tree.command(name="clearlogs", description="Clear a specific log, logs for a specific user or all logs for the server")
-@app_commands.describe(member="The member to target", case="The Verdis Case ID of the original log")
+@app_commands.describe(user="The member to target", case="The Verdis Case ID of the original log")
 @commands.has_permissions(kick_members=True)
-async def clearlogs(interaction: discord.Interaction, member: discord.Member = None, case: str = None):
+async def clearlogs(interaction: discord.Interaction, user: discord.User = None, case: str = None):
     #Set up logs database
     logs = sql.connect(f"{interaction.guild.id}.db")
     cursor = logs.cursor()
@@ -330,20 +388,20 @@ async def clearlogs(interaction: discord.Interaction, member: discord.Member = N
         except:
             await interaction.response.send_message(f">>> :x: Sorry, I could not find case `{case}` for this server.\n:bulb: Case IDs are case-sensitive. Make sure you used capital letters where necessary.")
 
-    elif member != None: #If member specified but no case
-        cursor.execute(f"DELETE FROM logs WHERE user_id = {member.id}")
-        await interaction.response.send_message(f"> :wastebasket: Successfully removed all logs for user <@!{member.id}>")
+    elif user != None: #If member specified but no case
+        cursor.execute(f"DELETE FROM logs WHERE user_id = {user.id}")
+        await interaction.response.send_message(f"> :wastebasket: Successfully removed all logs for user <@!{user.id}>")
 
     else: #If no member OR case specified 
         await interaction.response.send_message(">>> :information_source: Are you sure you want to remove **all** logs for this server? This action is **irreversible**.\nReact with :white_check_mark: to continue (auto cancel in 5s).")
         checkmsg = await interaction.original_response()
         await checkmsg.add_reaction("✅")
 
-        def claimCheck(reaction, user): #Check to confirm delete all logs
-            return reaction.message.id == checkmsg.id and reaction.emoji == "✅" and user.id == interaction.user.id and not user.bot
+        def claimCheck(reaction, ruser): #Check to confirm delete all logs
+            return reaction.message.id == checkmsg.id and reaction.emoji == "✅" and ruser.id == interaction.user.id and not ruser.bot
         
         try:
-            reaction, user = await client.wait_for("reaction_add", check=claimCheck, timeout=5)
+            reaction, ruser = await client.wait_for("reaction_add", check=claimCheck, timeout=5)
         except asyncio.TimeoutError: #If no reaction within 5s
             await checkmsg.edit(content="> :x: Clear all server logs cancelled")
         else:
