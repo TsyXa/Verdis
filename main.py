@@ -20,24 +20,24 @@ async def on_ready():
     except Exception as error:
         print("Error syncing command tree:\n" + error)
 
-@client.event
-async def on_command_error(ctx, error):
+@tree.event
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send(f"> :x: You cannot do that! Required permissions: `{error.missing_permissions}`")
+        await interaction.response.send(f"> :x: You cannot do that! Required permissions: `{error.missing_permissions}`")
     elif isinstance(error, commands.BotMissingPermissions):
-        await ctx.send(f">>> :x: I cannot do that! I require the following permissions: `{error.missing_permissions}`\n:bulb: Try moving my role above all others, or toggling `Administrator` permissions to True.")
+        await interaction.response.send(f">>> :x: I cannot do that! I require the following permissions: `{error.missing_permissions}`\n:bulb: Try moving my role above all others, or toggling `Administrator` permissions to True.")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
+        await interaction.response.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
     elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"> :x: You forgot to input the following arguments: `{error.param}`")
+        await interaction.response.send(f"> :x: You forgot to input the following arguments: `{error.param}`")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
+        await interaction.response.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
     elif isinstance(error, commands.UserNotFound):
-        await ctx.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
+        await interaction.response.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
     elif isinstance(error, commands.ChannelNotFound):
-        await ctx.send(f">>> :x: I could not find the channel `{error.argument}`.\n:bulb: Try tagging the channel, or using its Channel ID.")
+        await interaction.response.send(f">>> :x: I could not find the channel `{error.argument}`.\n:bulb: Try tagging the channel, or using its Channel ID.")
     else:
-        await ctx.send(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
+        await interaction.response.send(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
 
 @client.tree.command(name="help", description="Provides a list of commands or info about a specific command")
 @app_commands.describe(cmd="Info about a specific command")
