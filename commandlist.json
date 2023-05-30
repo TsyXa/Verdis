@@ -1,0 +1,11 @@
+{
+    "help": ["Shows this message", "/help (command)"],
+    "warn": ["Warns a user", "/warn [member] [reason] (duration)"],
+    "timeout": ["Gives a user a timeout for a specified period of time", "/timeout [member] [duration] [reason]"],
+    "untimeout": ["Removes a user's timeout", "/untimeout [member] (case ID)"],
+    "kick": ["Kicks a user", "/kick [member] [reason]"],
+    "ban": ["Bans a user", "/ban [user] [reason] (duration)"],
+    "unban": ["Unbans a user", "/unban [user] (case ID)"],
+    "logs": ["Shows a list of logs for either a specified user or the whole server", "/logs (user)"],
+    "clearlogs": ["Removes one or all logs from a specified user or the whole server", "/clearlogs (user) (case ID)"]
+}

@@ -11,6 +11,24 @@ from json import loads
 
 client = commands.Bot(intents = discord.Intents.all(), command_prefix = "!", allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
+#SQL Setup
+def sql_setup(ctx, table):
+    if table == "logs":
+        logs = sql.connect(f"{ctx.guild.id}.db")
+        cursor = logs.cursor()
+        try:
+            cursor.execute("""CREATE TABLE logs (
+                            log_id text,
+                            user_id integer,
+                            mod_id integer,
+                            reason text,
+                            date integer,
+                            expires integer
+                            )""")
+        except sql.OperationalError: #If db already exists
+            pass
+        return logs, cursor
+        
 @client.event
 async def on_ready():
     print("Client Ready")
@@ -20,24 +38,26 @@ async def on_ready():
     except Exception as error:
         print("Error syncing command tree:\n" + error)
 
-@client.event
-async def on_command_error(ctx, error):
+@client.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send(f"> :x: You cannot do that! Required permissions: `{error.missing_permissions}`")
+        await interaction.response.send_message(f"> :x: You cannot do that! Required permissions: `{error.missing_permissions}`")
     elif isinstance(error, commands.BotMissingPermissions):
-        await ctx.send(f">>> :x: I cannot do that! I require the following permissions: `{error.missing_permissions}`\n:bulb: Try moving my role above all others, or toggling `Administrator` permissions to True.")
+        await interaction.response.send_message(f">>> :x: I cannot do that! I require the following permissions: `{error.missing_permissions}`\n:bulb: Try moving my role above all others, or toggling `Administrator` permissions to True.")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
+        await interaction.response.send_message(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
     elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"> :x: You forgot to input the following arguments: `{error.param}`")
+        await interaction.response.send_message(f"> :x: You forgot to input the following arguments: `{error.param}`")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
+        await interaction.response.send_message(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
     elif isinstance(error, commands.UserNotFound):
-        await ctx.send(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
+        await interaction.response.send_message(f">>> :x: I could not find the user `{error.argument}`.\n:bulb: Try tagging the user, or using their User ID.")
     elif isinstance(error, commands.ChannelNotFound):
-        await ctx.send(f">>> :x: I could not find the channel `{error.argument}`.\n:bulb: Try tagging the channel, or using its Channel ID.")
+        await interaction.response.send_message(f">>> :x: I could not find the channel `{error.argument}`.\n:bulb: Try tagging the channel, or using its Channel ID.")
+    elif isinstance(error, commands.CommandNotFound):
+        return
     else:
-        await ctx.send(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
+        await interaction.response.send_message(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
 
 @client.tree.command(name="help", description="Provides a list of commands or info about a specific command")
 @app_commands.describe(cmd="Info about a specific command")
@@ -66,19 +86,7 @@ async def help(interaction: discord.Interaction, cmd: str = None):
 @commands.has_permissions(manage_messages=True)
 async def warn(interaction: discord.Interaction, member: discord.Member, reason: str, duration: str = None):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     durmessage, duration = durationcalc.dur(duration)
 
@@ -105,21 +113,7 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 @commands.has_permissions(manage_messages=True)
 async def logs(interaction: discord.Interaction, member: discord.Member = None):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-        await interaction.response.send_message("> :x: There are no logs for this server!")
-        return
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     logstring = ">>> "
 
@@ -177,19 +171,7 @@ async def logs(interaction: discord.Interaction, member: discord.Member = None):
 @commands.has_permissions(moderate_members=True)
 async def timeout(interaction: discord.Interaction, member: discord.Member, reason: str, duration: str):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     durmessage, duration, todur = durationcalc.to_dur(duration)
 
@@ -215,19 +197,7 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, reas
 @commands.has_permissions(moderate_members=True)
 async def untimeout(interaction: discord.Interaction, member: discord.Member, case: str = None):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     date = floor(unix())
 
@@ -250,19 +220,7 @@ async def untimeout(interaction: discord.Interaction, member: discord.Member, ca
 @commands.has_permissions(kick_members=True)
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     case = idgen.new(6) #Create case number
 
@@ -284,19 +242,7 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
 @commands.has_permissions(ban_members=True)
 async def ban(interaction: discord.Interaction, user: discord.User, reason: str, duration: str = None):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     durmessage, duration = durationcalc.dur(duration)
 
@@ -325,19 +271,7 @@ async def ban(interaction: discord.Interaction, user: discord.User, reason: str,
 @commands.has_permissions(ban_members=True)
 async def unban(interaction: discord.Interaction, user: discord.User, case: str = None):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
 
     date = floor(unix())
 
@@ -365,19 +299,7 @@ async def unban(interaction: discord.Interaction, user: discord.User, case: str 
 @commands.has_permissions(kick_members=True)
 async def clearlogs(interaction: discord.Interaction, user: discord.User = None, case: str = None):
     #Set up logs database
-    logs = sql.connect(f"{interaction.guild.id}.db")
-    cursor = logs.cursor()
-    try:
-        cursor.execute("""CREATE TABLE logs (
-                        log_id text,
-                        user_id integer,
-                        mod_id integer,
-                        reason text,
-                        date integer,
-                        expires integer
-                        )""")
-    except sql.OperationalError: #If db already exists
-        pass
+    logs, cursor = sql_setup(interaction, "logs")
     
     if case != None: #If case specified
         try:
