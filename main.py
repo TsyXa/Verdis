@@ -8,27 +8,10 @@ import asyncio
 import sqlite3 as sql
 from math import floor
 from json import loads
+import sql_manage as sqlm
 
 client = commands.Bot(intents = discord.Intents.all(), command_prefix = "!", allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
-#SQL Setup
-def sql_setup(ctx, table):
-    if table == "logs":
-        logs = sql.connect(f"{ctx.guild.id}.db")
-        cursor = logs.cursor()
-        try:
-            cursor.execute("""CREATE TABLE logs (
-                            log_id text,
-                            user_id integer,
-                            mod_id integer,
-                            reason text,
-                            date integer,
-                            expires integer
-                            )""")
-        except sql.OperationalError: #If db already exists
-            pass
-        return logs, cursor
-        
 @client.event
 async def on_ready():
     print("Client Ready")
@@ -56,6 +39,8 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         await interaction.response.send_message(f">>> :x: I could not find the channel `{error.argument}`.\n:bulb: Try tagging the channel, or using its Channel ID.")
     elif isinstance(error, commands.CommandNotFound):
         return
+    elif isinstance(error, discord.Forbidden):
+        await interaction.response.send_message(f">>> :x: I cannot do that!\n:bulb: This is likely because the user you are trying to target is the server owner. If not, please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
     else:
         await interaction.response.send_message(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
 
@@ -86,7 +71,7 @@ async def help(interaction: discord.Interaction, cmd: str = None):
 @commands.has_permissions(manage_messages=True)
 async def warn(interaction: discord.Interaction, member: discord.Member, reason: str, duration: str = None):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
 
     durmessage, duration = durationcalc.dur(duration)
 
@@ -113,7 +98,7 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 @commands.has_permissions(manage_messages=True)
 async def logs(interaction: discord.Interaction, member: discord.Member = None):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
 
     logstring = ">>> "
 
@@ -171,7 +156,7 @@ async def logs(interaction: discord.Interaction, member: discord.Member = None):
 @commands.has_permissions(moderate_members=True)
 async def timeout(interaction: discord.Interaction, member: discord.Member, reason: str, duration: str):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
 
     durmessage, duration, todur = durationcalc.to_dur(duration)
 
@@ -197,12 +182,23 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, reas
 @commands.has_permissions(moderate_members=True)
 async def untimeout(interaction: discord.Interaction, member: discord.Member, case: str = None):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
-
+    logs, cursor = sqlm.setup(interaction, "logs")
     date = floor(unix())
-
+    
     #Update and close logs database
-    cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = {member.id}") #Test if log ID is valid
+
+    #Test if log ID is valid
+    if not sqlm.caseID(cursor, case, "TMO"):
+        
+        try: #Construct original command message
+            cmd = "/untimeout <@!" + str(member.id) + "> " + case
+        except:
+            cmd = "/untimeout <@!" + str(member.id) + ">"
+
+        await sqlm.invalid_id(client, interaction, cmd)
+        return
+    
+    cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = {member.id}") 
     if case == None or cursor.fetchone() == []:
         case = f"TMO-{idgen.new(6)}"
         cursor.execute(f"INSERT INTO logs VALUES ('{case}', {member.id}, 0, 'Unknown', 0, {floor(unix())})")
@@ -220,7 +216,7 @@ async def untimeout(interaction: discord.Interaction, member: discord.Member, ca
 @commands.has_permissions(kick_members=True)
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
 
     case = idgen.new(6) #Create case number
 
@@ -242,7 +238,7 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
 @commands.has_permissions(ban_members=True)
 async def ban(interaction: discord.Interaction, user: discord.User, reason: str, duration: str = None):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
 
     durmessage, duration = durationcalc.dur(duration)
 
@@ -271,7 +267,7 @@ async def ban(interaction: discord.Interaction, user: discord.User, reason: str,
 @commands.has_permissions(ban_members=True)
 async def unban(interaction: discord.Interaction, user: discord.User, case: str = None):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
 
     date = floor(unix())
 
@@ -299,7 +295,7 @@ async def unban(interaction: discord.Interaction, user: discord.User, case: str 
 @commands.has_permissions(kick_members=True)
 async def clearlogs(interaction: discord.Interaction, user: discord.User = None, case: str = None):
     #Set up logs database
-    logs, cursor = sql_setup(interaction, "logs")
+    logs, cursor = sqlm.setup(interaction, "logs")
     
     if case != None: #If case specified
         try:
