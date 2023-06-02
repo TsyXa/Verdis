@@ -81,7 +81,7 @@ async def help(interaction: discord.Interaction, cmd: str = None):
         except:
             await interaction.response.send_message(f">>> :x: Sorry, I could not find the command `{cmd}`.\n:bulb: Have you spelt the command correctly? Use `/help` to check the command list and try again.", ephemeral = True)
 
-@client.tree.command(name="warn", description="Warn a user")
+@client.tree.command(name="warn", description="Warn a member")
 @app_commands.describe(member="The member to warn", reason = "The reason for the warning", duration = "How long the warning should last")
 @commands.has_permissions(manage_messages=True)
 async def warn(interaction: discord.Interaction, member: discord.Member, reason: str, duration: str = None):
@@ -109,23 +109,23 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
         await interaction.response.send_message(f">>> Successfully warned <@!{member.id}> for **{reason}** with case ID `WRN-{case}`. This warning **{durmessage}**.\n:warning: I could not DM the user to inform of them of this warning, either due to their DMs being closed or them having blocked this bot.")
 
 @client.tree.command(name="logs", description="View all logs for the server or an individual user")
-@app_commands.describe(member="The member to view")
+@app_commands.describe(user="The user to view")
 @commands.has_permissions(manage_messages=True)
-async def logs(interaction: discord.Interaction, member: discord.Member = None):
+async def logs(interaction: discord.Interaction, user: discord.User = None):
     #Set up logs database
     logs, cursor = sql_setup(interaction, "logs")
 
     logstring = ">>> "
 
-    if member == None: #If member not inputted present ALL logs
+    if user == None: #If user not inputted present ALL logs
         cursor.execute(f"SELECT * FROM logs")
     else:
-        cursor.execute(f"SELECT * FROM logs WHERE user_id = {member.id}")
+        cursor.execute(f"SELECT * FROM logs WHERE user_id = {user.id}")
 
     loglist = cursor.fetchall()
 
     if len(loglist) == 0: #If list is empty
-        if member == None:
+        if user == None:
             await interaction.response.send_message("> :x: There are no logs for this server!")
         else:
             await interaction.response.send_message("> :x: There are no logs for this user!")
