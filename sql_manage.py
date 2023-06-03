@@ -39,7 +39,23 @@ def caseID(cursor, case, cmd = None):
     
     return True
 
-async def invalid_id(client, interaction, cmd):
-    devlogs = client.get_channel(1097947670070427818)
-    await devlogs.send(f"## SQL Error Detected ##\nUser: <@!{interaction.user.id}> (`{interaction.user.id}`)\nCommand: `{interaction.command.name}`\nMessage: `{cmd}`\nGuild ID: `{interaction.guild.id}`")
-    await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
+#Sanitise reason inputs
+def reason(reason):
+    if reason.find("DROP TABLE") != -1:
+        return False
+    if reason.find("UNION SELECT") != -1:
+        return False
+    if reason.find(".txt") != -1:
+        return False
+    if reason.find(".py") != -1:
+        return False
+    if reason.find(".json") != -1:
+        return False
+    if reason.find(".js") != -1:
+        return False
+    if reason.find(".exe") != -1:
+        return False
+    if reason.find(";") != -1:
+        return False
+    
+    return True
