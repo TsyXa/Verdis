@@ -82,10 +82,8 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 
     case = idgen.new(6) #Create case number
 
-    #Test if reason is valid
-    if not sqlm.reason(reason):
-        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
-        return
+    #Sanitise inputs
+    reason = sqlm.sanitise(reason)
 
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('WRN-{case}', {member.id}, {interaction.user.id}, '{reason}', {floor(unix())}, {date})")
@@ -169,10 +167,8 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, reas
 
     case = idgen.new(6) #Create case number
 
-    #Test if reason is valid
-    if not sqlm.reason(reason):
-        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
-        return
+    #Sanitise inputs
+    reason = sqlm.sanitise(reason)
     
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('TMO-{case}', {member.id}, {interaction.user.id}, '{reason}', {floor(unix())}, {date})")
@@ -197,10 +193,11 @@ async def untimeout(interaction: discord.Interaction, member: discord.Member, ca
     
     #Update and close logs database
     
-    #Test if log ID is valid
-    if not sqlm.caseID(cursor, case, "TMO"):
+    #Sanitise inputs
+    if not sqlm.caseID(cursor, case, "BAN"):
         await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
         return
+    case = sqlm.sanitise(case)
     
     cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = {member.id}") 
     if case == None or cursor.fetchone() == []:
@@ -224,10 +221,8 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
 
     case = idgen.new(6) #Create case number
 
-    #Test if reason is valid
-    if not sqlm.reason(reason):
-        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
-        return
+    #Sanitise inputs
+    reason = sqlm.sanitise(reason)
     
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('KCK-{case}', {member.id}, {interaction.user.id}, '{reason}', {floor(unix())}, 0)")
@@ -258,10 +253,8 @@ async def ban(interaction: discord.Interaction, user: discord.User, reason: str,
 
     case = idgen.new(6) #Create case number
 
-    #Test if reason is valid
-    if not sqlm.reason(reason):
-        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
-        return
+    #Sanitise inputs
+    reason = sqlm.sanitise(reason)
     
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('BAN-{case}', {user.id}, {interaction.user.id}, '{reason}', {floor(unix())}, {date})")
@@ -286,9 +279,11 @@ async def unban(interaction: discord.Interaction, user: discord.User, case: str 
     date = floor(unix())
 
     #Update and close logs database
+    #Sanitise inputs
     if not sqlm.caseID(cursor, case, "BAN"):
         await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
         return
+    case = sqlm.sanitise(case)
     
     cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = '{user.id}'") #Test if log ID is valid
     if case == None or cursor.fetchone() == []:
@@ -316,9 +311,11 @@ async def clearlogs(interaction: discord.Interaction, user: discord.User = None,
     logs, cursor = sqlm.setup(interaction, "logs")
     
     if case != None: #If case specified
-        if not sqlm.caseID(cursor, case): #Check if case ID is valid
+        #Sanitise inputs
+        if not sqlm.caseID(cursor, case):
             await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
             return
+        case = sqlm.sanitise(case)
     
         try:
             cursor.execute(f"SELECT user_id FROM logs WHERE log_id = '{case}'")
