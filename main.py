@@ -42,7 +42,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     elif isinstance(error, discord.Forbidden):
         await interaction.response.send_message(f">>> :x: I cannot do that!\n:bulb: This is likely because the user you are trying to target is the server owner. If not, please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
     else:
-        await interaction.response.send_message(f">>> :x: **Unexpected Error**\nAn error occurred. Please report this message to <@!476457324609929226> along with the original command you entered.```\n{error}\n```")
+        await interaction.response.send_message(f">>> :x: **Unexpected Error**\nAn error occurred. If this error persists, please report this message as an issue to the Verdis GitHub along with the original command you entered.```\n{error}\n\n```:tools: **Official Github** https://github.com/TsyXa/Verdis")
 
 @client.tree.command(name="help", description="Provides a list of commands or info about a specific command")
 @app_commands.describe(cmd="Info about a specific command")
@@ -66,7 +66,7 @@ async def help(interaction: discord.Interaction, cmd: str = None):
         except:
             await interaction.response.send_message(f">>> :x: Sorry, I could not find the command `{cmd}`.\n:bulb: Have you spelt the command correctly? Use `/help` to check the command list and try again.", ephemeral = True)
 
-@client.tree.command(name="warn", description="Warn a user")
+@client.tree.command(name="warn", description="Warn a member")
 @app_commands.describe(member="The member to warn", reason = "The reason for the warning", duration = "How long the warning should last")
 @commands.has_permissions(manage_messages=True)
 async def warn(interaction: discord.Interaction, member: discord.Member, reason: str, duration: str = None):
@@ -82,6 +82,11 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 
     case = idgen.new(6) #Create case number
 
+    #Test if reason is valid
+    if not sqlm.reason(reason):
+        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
+        return
+
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('WRN-{case}', {member.id}, {interaction.user.id}, '{reason}', {floor(unix())}, {date})")
     logs.commit()
@@ -94,23 +99,23 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
         await interaction.response.send_message(f">>> Successfully warned <@!{member.id}> for **{reason}** with case ID `WRN-{case}`. This warning **{durmessage}**.\n:warning: I could not DM the user to inform of them of this warning, either due to their DMs being closed or them having blocked this bot.")
 
 @client.tree.command(name="logs", description="View all logs for the server or an individual user")
-@app_commands.describe(member="The member to view")
+@app_commands.describe(user="The user to view")
 @commands.has_permissions(manage_messages=True)
-async def logs(interaction: discord.Interaction, member: discord.Member = None):
+async def logs(interaction: discord.Interaction, user: discord.User = None):
     #Set up logs database
     logs, cursor = sqlm.setup(interaction, "logs")
 
     logstring = ">>> "
 
-    if member == None: #If member not inputted present ALL logs
+    if user == None: #If user not inputted present ALL logs
         cursor.execute(f"SELECT * FROM logs")
     else:
-        cursor.execute(f"SELECT * FROM logs WHERE user_id = {member.id}")
+        cursor.execute(f"SELECT * FROM logs WHERE user_id = {user.id}")
 
     loglist = cursor.fetchall()
 
     if len(loglist) == 0: #If list is empty
-        if member == None:
+        if user == None:
             await interaction.response.send_message("> :x: There are no logs for this server!")
         else:
             await interaction.response.send_message("> :x: There are no logs for this user!")
@@ -164,6 +169,11 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, reas
 
     case = idgen.new(6) #Create case number
 
+    #Test if reason is valid
+    if not sqlm.reason(reason):
+        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
+        return
+    
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('TMO-{case}', {member.id}, {interaction.user.id}, '{reason}', {floor(unix())}, {date})")
     logs.commit()
@@ -186,16 +196,10 @@ async def untimeout(interaction: discord.Interaction, member: discord.Member, ca
     date = floor(unix())
     
     #Update and close logs database
-
+    
     #Test if log ID is valid
     if not sqlm.caseID(cursor, case, "TMO"):
-        
-        try: #Construct original command message
-            cmd = "/untimeout <@!" + str(member.id) + "> " + case
-        except:
-            cmd = "/untimeout <@!" + str(member.id) + ">"
-
-        await sqlm.invalid_id(client, interaction, cmd)
+        await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
         return
     
     cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = {member.id}") 
@@ -220,6 +224,11 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
 
     case = idgen.new(6) #Create case number
 
+    #Test if reason is valid
+    if not sqlm.reason(reason):
+        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
+        return
+    
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('KCK-{case}', {member.id}, {interaction.user.id}, '{reason}', {floor(unix())}, 0)")
     logs.commit()
@@ -249,6 +258,11 @@ async def ban(interaction: discord.Interaction, user: discord.User, reason: str,
 
     case = idgen.new(6) #Create case number
 
+    #Test if reason is valid
+    if not sqlm.reason(reason):
+        await interaction.response.send_message("> :x: **Invalid reason**, I am unable to execute this command.")
+        return
+    
     #Update and close logs database
     cursor.execute(f"INSERT INTO logs VALUES ('BAN-{case}', {user.id}, {interaction.user.id}, '{reason}', {floor(unix())}, {date})")
     logs.commit()
@@ -272,6 +286,10 @@ async def unban(interaction: discord.Interaction, user: discord.User, case: str 
     date = floor(unix())
 
     #Update and close logs database
+    if not sqlm.caseID(cursor, case, "BAN"):
+        await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
+        return
+    
     cursor.execute(f"SELECT * FROM logs WHERE log_id = '{case}' AND user_id = '{user.id}'") #Test if log ID is valid
     if case == None or cursor.fetchone() == []:
         case = f"BAN-{idgen.new(6)}"
@@ -298,6 +316,10 @@ async def clearlogs(interaction: discord.Interaction, user: discord.User = None,
     logs, cursor = sqlm.setup(interaction, "logs")
     
     if case != None: #If case specified
+        if not sqlm.caseID(cursor, case): #Check if case ID is valid
+            await interaction.response.send_message("> :x: **Invalid case ID**, I am unable to execute this command.")
+            return
+    
         try:
             cursor.execute(f"SELECT user_id FROM logs WHERE log_id = '{case}'")
             userid = cursor.fetchone()[0]
